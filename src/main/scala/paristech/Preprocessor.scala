@@ -1,7 +1,8 @@
 package paristech
 
 import org.apache.spark.SparkConf
-import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.{DataFrame, SparkSession}
+import org.apache.spark.sql.functions
 
 object Preprocessor {
 
@@ -28,6 +29,7 @@ object Preprocessor {
       .appName("TP Spark : Preprocessor")
       .getOrCreate()
 
+    import spark.implicits._
     /*******************************************************************************
       *
       *       TP 2
@@ -39,9 +41,71 @@ object Preprocessor {
       *       if problems with unimported modules => sbt plugins update
       *
       ********************************************************************************/
+    val df: DataFrame = spark
+      .read
+      .option("header", true) // utilise la première ligne du (des) fichier(s) comme header
+      .option("inferSchema", "true") // pour inférer le type de chaque colonne (Int, String, etc.)
+      .csv("/home/edoumard/spark_project/train_clean.csv")
 
     println("\n")
-    println("Hello World ! from Preprocessor")
+
+    println(s"Nombre de lignes : ${df.count}")
+    println(s"Nombre de colonnes : ${df.columns.length}")
+
     println("\n")
+
+    df.show()
+
+    println("\n")
+
+    df.printSchema()
+
+    println("\n")
+
+    val dfCasted: DataFrame = df
+      .withColumn("goal", $"goal".cast("Int"))
+      .withColumn("deadline", $"deadline".cast("Int"))
+      .withColumn("state_changed_at", $"state_changed_at".cast("Int"))
+      .withColumn("created_at", $"created_at".cast("Int"))
+      .withColumn("launched_at", $"launched_at".cast("Int"))
+      .withColumn("backers_count", $"backers_count".cast("Int"))
+      .withColumn("final_status", $"final_status".cast("Int"))
+
+    dfCasted.printSchema()
+
+    println("\n")
+
+    dfCasted
+      .select("goal", "backers_count", "final_status","disable_communication")
+      .describe()
+      .show
+
+    //Etude de la colonne disable_communication
+    dfCasted.groupBy("disable_communication").count.orderBy($"count".desc).show(100)
+
+    //On remarque que les valeurs "normales" de cette colonne sont False et True
+
+    dfCasted.filter($"disable_communication"=!="False").filter($"disable_communication"=!="True").show()
+
+    //On voit que les entrees qui ne sont ni a True ni a False sont des entrées invalides
+    //Elles sont complètement décalées vers la droite, donc sans statut final
+    //On remarque aussi qu'il y a tres peu de lignes a True. On peut donc filtrer les lignes invalides et supprimer cette colonne
+    val df2: DataFrame = dfCasted
+      .filter(($"disable_communication"==="False" || $"disable_communication"==="True"))
+      .drop("disable_communication")
+
+    //Il ne semble pas y avoir de duplicats dans les donnees puisqu'a nom égales, les campagnes ont des moments de lancement différents.
+    df2.groupBy("name","launched_at").count().sort($"count".desc).show()
+
+    df2.filter($"name".contains("Canceled")).count()
+    //On remarque qu'il y a 4309 kickstarters qui ont été annulés
+
+    val dfNoFutur: DataFrame = df2.drop("backers_count", "state_changed_at")
+
+    //Pour la partie sur les country/currency, j'ai un peu triché en supprimant les lignes "problématiques" depuis le début puisqu'elles
+    //ne contiennent pas de statut final. Après ce filtrage, il n'y a plus de problèmes de colonnes décalées (et le nombre de colonnes
+    //supprimées ainsi (environ 700) est négligeable).
+
+
   }
 }
