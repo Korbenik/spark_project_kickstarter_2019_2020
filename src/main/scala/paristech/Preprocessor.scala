@@ -2,7 +2,8 @@ package paristech
 
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.{DataFrame, SparkSession}
-import org.apache.spark.sql.functions
+import org.apache.spark.sql.functions._
+import org.apache.spark.sql.DataFrame
 
 object Preprocessor {
 
@@ -106,6 +107,10 @@ object Preprocessor {
     //ne contiennent pas de statut final. Après ce filtrage, il n'y a plus de problèmes de colonnes décalées (et le nombre de colonnes
     //supprimées ainsi (environ 700) est négligeable).
 
+    val df3 : DataFrame = dfNoFutur
+      .withColumn("days_campaign",datediff(from_unixtime($"deadline"),from_unixtime($"launched_at")))
+      .withColumn("hours_prepa",hour(from_unixtime($"launched_at"-$"created_at")))
 
+    df3.show()
   }
 }
