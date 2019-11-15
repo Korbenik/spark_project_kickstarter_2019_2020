@@ -1,6 +1,8 @@
 *.class
 *.log
 .idea/
+data/*
+df_saved/*
 
 # sbt specific
 .cache

@@ -111,6 +111,36 @@ object Preprocessor {
       .withColumn("days_campaign",datediff(from_unixtime($"deadline"),from_unixtime($"launched_at")))
       .withColumn("hours_prepa",hour(from_unixtime($"launched_at"-$"created_at")))
 
-    df3.show()
+    val df_pruned : DataFrame = df3.drop("launched_at").drop("created_at").drop("deadline")
+
+    val df_str_min : DataFrame = df_pruned
+      .withColumn("name", lower(col("name")))
+      .withColumn("desc", lower(col("desc")))
+      .withColumn("keywords", lower(col("keywords")))
+
+    df_str_min.show()
+
+    val df_final : DataFrame = df_str_min
+      .withColumn("text",concat(col("name"),lit(" "),col("desc"),lit(" "),col("keywords")))
+
+    df_final.filter(df_final("days_campaign").isNull
+      || df_final("days_campaign").isNaN
+      || df_final("days_campaign")===""
+      || df_final("hours_prepa").isNull
+      || df_final("hours_prepa").isNaN
+      || df_final("goal").isNull
+      || df_final("goal").isNaN
+      || df_final("goal")===""
+      || df_final("country").isNull
+      || df_final("country").isNaN
+      || df_final("country")===""
+      || df_final("currency").isNull
+      || df_final("currency").isNaN
+      || df_final("currency")==="").show()
+
+    //Aucune valeur nulle dans ce DF !
+
+    df_final.write.parquet("df_saved/df_final")
   }
+
 }
