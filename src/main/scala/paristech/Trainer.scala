@@ -1,7 +1,11 @@
 package paristech
 
 import org.apache.spark.SparkConf
+import org.apache.spark.ml.Pipeline
+import org.apache.spark.ml.classification.LogisticRegression
+import org.apache.spark.ml.evaluation.{MulticlassClassificationEvaluator, RegressionEvaluator}
 import org.apache.spark.ml.feature.{CountVectorizer, CountVectorizerModel, IDF, IDFModel, OneHotEncoderEstimator, RegexTokenizer, StopWordsRemover, StringIndexer, VectorAssembler}
+import org.apache.spark.ml.tuning.{ParamGridBuilder, TrainValidationSplit}
 import org.apache.spark.sql.{DataFrame, SparkSession}
 
 
@@ -117,5 +121,65 @@ object Trainer {
 
     df_features.select("features").show(false)
 
+    val lr = new LogisticRegression()
+      .setElasticNetParam(0.0)
+      .setFitIntercept(true)
+      .setFeaturesCol("features")
+      .setLabelCol("final_status")
+      .setStandardization(true)
+      .setPredictionCol("predictions")
+      .setRawPredictionCol("raw_predictions")
+      .setThresholds(Array(0.7, 0.3))
+      .setTol(1.0e-6)
+      .setMaxIter(20)
+
+    //Pipeline
+
+    val pipeline = new Pipeline()
+      .setStages(Array(tokenizer, stopWords_remover, cvModel, idfModel, country_indexer, currency_indexer, onehot_encoder, assembler, lr))
+
+    //Model training
+    val splitted_df = df.randomSplit(Array(0.9,0.1))
+
+    val training = splitted_df(0)
+    val test = splitted_df(1)
+    val model =  pipeline.fit(training)
+
+    //Sauvegarde
+    model.write.overwrite().save("models/first-model")
+
+    //Test
+    val dfWithSimplePredictions = model.transform(test)
+
+    dfWithSimplePredictions.groupBy("final_status", "predictions").count.show()
+
+    val evaluator = new MulticlassClassificationEvaluator()
+      .setLabelCol("final_status")
+      .setPredictionCol("predictions")
+      .setMetricName("f1")
+
+    println("f1-score = "+ evaluator.evaluate(dfWithSimplePredictions))
+
+    val paramGrid = new ParamGridBuilder()
+      .addGrid(lr.regParam, Array(10E-8,10E-6,10E-4,10E-2))
+      .addGrid(cvModel.minDF,Array(55.0,75.0,95.0))
+      .build()
+
+    val trainValidationSplit = new TrainValidationSplit()
+      .setEstimator(pipeline)
+      .setEvaluator(evaluator)
+      .setEstimatorParamMaps(paramGrid)
+      .setTrainRatio(0.7)
+
+    println("Tu plantes là ?")
+    val modelGrid = trainValidationSplit.fit(training)
+
+    println("Où là ?")
+    //Test du modèle sélectionné
+    val dfWithPredictions = modelGrid.transform(test)
+
+    println("f1-score = "+ evaluator.evaluate(dfWithPredictions))
+
   }
+
 }
