@@ -46,7 +46,7 @@ object Preprocessor {
       .read
       .option("header", true) // utilise la première ligne du (des) fichier(s) comme header
       .option("inferSchema", "true") // pour inférer le type de chaque colonne (Int, String, etc.)
-      .csv("/home/edoumard/spark_project/train_clean.csv")
+      .csv("src/main/resources/train_clean.csv")
 
     println("\n")
 
@@ -140,7 +140,7 @@ object Preprocessor {
 
     //Aucune valeur nulle dans ce DF !
 
-    df_final.write.parquet("df_saved/df_final")
+    df_final.write.mode("overwrite").parquet("src/main/resources/preprocessed")
   }
 
 }

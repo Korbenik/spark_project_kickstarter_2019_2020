@@ -48,7 +48,7 @@ object Trainer {
 
     //Stage 0 : chargement du DF
 
-    val df: DataFrame = spark.read.parquet("df_saved/prepared_trainingset")
+    val df: DataFrame = spark.read.parquet("src/main/resources/prepared_trainingset")
 
     df.show()
 
@@ -101,8 +101,6 @@ object Trainer {
     val df_country_indexed = country_indexer.fit(df_tfidf).transform(df_tfidf)
     val df_indexed = currency_indexer.fit(df_country_indexed).transform(df_country_indexed)
 
-    df_indexed.select("country2","country_indexed","currency2","currency_indexed").show()
-
     //Stages 7 & 8
 
     val onehot_encoder = new OneHotEncoderEstimator()
@@ -111,15 +109,11 @@ object Trainer {
 
     val df_encoded = onehot_encoder.fit(df_indexed).transform(df_indexed)
 
-    df_encoded.select("country2","currency2","country_indexed", "currency_indexed","country_onehot", "currency_onehot").show()
-
     val assembler = new VectorAssembler()
       .setInputCols(Array("tfidf", "days_campaign", "hours_prepa", "goal", "country_onehot","currency_onehot"))
       .setOutputCol("features")
 
     val df_features = assembler.transform(df_encoded)
-
-    df_features.select("features").show(false)
 
     val lr = new LogisticRegression()
       .setElasticNetParam(0.0)
@@ -146,7 +140,7 @@ object Trainer {
     val model =  pipeline.fit(training)
 
     //Sauvegarde
-    model.write.overwrite().save("models/first-model")
+    model.write.overwrite().save("src/main/resources/first-model")
 
     //Test
     val dfWithSimplePredictions = model.transform(test)
@@ -158,7 +152,7 @@ object Trainer {
       .setPredictionCol("predictions")
       .setMetricName("f1")
 
-    println("f1-score = "+ evaluator.evaluate(dfWithSimplePredictions))
+    println("f1-score du modèle simple = "+ evaluator.evaluate(dfWithSimplePredictions))
 
     val paramGrid = new ParamGridBuilder()
       .addGrid(lr.regParam, Array(10E-8,10E-6,10E-4,10E-2))
@@ -171,15 +165,18 @@ object Trainer {
       .setEstimatorParamMaps(paramGrid)
       .setTrainRatio(0.7)
 
-    println("Tu plantes là ?")
+    println("Entraînement du modèle (cette étape est assez longue)")
     val modelGrid = trainValidationSplit.fit(training)
 
-    println("Où là ?")
+    //Sauvegarde du modèle entraîné sur la grille
+    modelGrid.write.overwrite().save("src/main/resources/model_on_grid")
+
     //Test du modèle sélectionné
     val dfWithPredictions = modelGrid.transform(test)
 
-    println("f1-score = "+ evaluator.evaluate(dfWithPredictions))
+    dfWithPredictions.groupBy("final_status", "predictions").count.show()
 
+    println("f1-score du modèle entraîné sur la grille de paramètres = "+ evaluator.evaluate(dfWithPredictions))
   }
 
 }
